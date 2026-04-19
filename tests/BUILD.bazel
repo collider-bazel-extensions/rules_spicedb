@@ -1,0 +1,75 @@
+load("//:defs.bzl",
+    "spicedb_schema",
+    "spicedb_relationships",
+    "spicedb_test",
+    "spicedb_server",
+    "spicedb_health_check",
+)
+
+# ---------------------------------------------------------------------------
+# Schema and seed targets used by tests
+# ---------------------------------------------------------------------------
+
+spicedb_schema(
+    name = "example_schema",
+    srcs = ["schema/example.zed"],
+)
+
+spicedb_relationships(
+    name   = "example_seed",
+    schema = ":example_schema",
+    srcs   = ["seed/relationships.txt"],
+)
+
+# ---------------------------------------------------------------------------
+# spicedb_test targets (each gets its own ephemeral SpiceDB instance)
+# ---------------------------------------------------------------------------
+
+spicedb_test(
+    name   = "schema_smoke_test",
+    schema = ":example_schema",
+    srcs   = ["schema_smoke_test.sh"],
+    # No relationships — just verifies schema was written.
+)
+
+spicedb_test(
+    name          = "seed_smoke_test",
+    schema        = ":example_schema",
+    relationships = ":example_seed",
+    srcs          = ["seed_smoke_test.sh"],
+    # Verifies relationships exist and permissions resolve correctly.
+)
+
+# ---------------------------------------------------------------------------
+# spicedb_server + health check (for server_test and health_check_test)
+# ---------------------------------------------------------------------------
+
+spicedb_server(
+    name          = "test_server",
+    schema        = ":example_schema",
+    relationships = ":example_seed",
+)
+
+spicedb_health_check(
+    name   = "test_server_health",
+    server = ":test_server",
+)
+
+# ---------------------------------------------------------------------------
+# Standalone tests (start their own launcher or test the health check)
+# ---------------------------------------------------------------------------
+
+sh_test(
+    name = "spicedb_health_check_test",
+    srcs = ["spicedb_health_check_test.sh"],
+    data = [":test_server_health"],
+    size = "small",
+)
+
+sh_test(
+    name = "spicedb_server_test",
+    srcs = ["spicedb_server_test.sh"],
+    data = [":test_server"],
+    size = "large",
+    tags = ["requires-spicedb"],
+)

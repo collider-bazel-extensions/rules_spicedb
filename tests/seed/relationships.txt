@@ -1,0 +1,5 @@
+# Seed relationships for rules_spicedb self-tests.
+# Format: object:id#relation@subject:id
+document:doc1#owner@user:alice
+document:doc1#viewer@user:bob
+document:doc2#owner@user:bob

@@ -1,0 +1,11 @@
+// Example SpiceDB schema for rules_spicedb self-tests.
+
+definition user {}
+
+definition document {
+    relation owner:  user
+    relation viewer: user
+
+    permission write = owner
+    permission read  = viewer + owner
+}
