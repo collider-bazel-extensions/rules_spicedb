@@ -93,7 +93,6 @@ spicedb_test(
 set -euo pipefail
 
 # SpiceDB connection details are injected as env vars.
-# ZED_ENDPOINT, ZED_TOKEN, ZED_INSECURE are set for the zed CLI.
 result=$("$ZED_BIN" permission check document:doc1 write user:alice \
     --endpoint="$SPICEDB_GRPC_ADDR" \
     --token="$SPICEDB_PRESHARED_KEY" \
@@ -102,6 +101,180 @@ result=$("$ZED_BIN" permission check document:doc1 write user:alice \
 echo "$result" | grep -q "true" || { echo "FAIL: alice should have write"; exit 1; }
 echo "PASS"
 ```
+
+## Complex example: platform access control
+
+This example models a GitHub-style permission system across three resource
+types — organizations, teams, and repositories — with hierarchical permission
+inheritance. It mirrors the test in `tests/schema/platform.zed`.
+
+### Schema
+
+**schema/platform.zed**:
+```
+definition user {}
+
+definition organization {
+    relation admin:  user
+    relation member: user
+
+    permission admin_access = admin
+    permission access       = member + admin
+}
+
+definition team {
+    relation org:    organization
+    relation member: user
+
+    // Org admins implicitly lead every team.
+    permission membership = member + org->admin_access
+}
+
+definition repository {
+    relation org:         organization
+    relation maintainer:  user
+    relation writer:      user
+    relation reader:      user
+    relation reader_team: team
+
+    // Org admins inherit full maintain rights across all repos.
+    permission maintain = maintainer + org->admin_access
+
+    // write > maintain
+    permission write = writer + maintain
+
+    // read is open to individual readers, team members, and anyone who can write.
+    permission read = reader + reader_team->membership + write
+}
+```
+
+### Relationships
+
+**seed/platform.txt**:
+```
+# Organization
+organization:acme#admin@user:alice
+organization:acme#member@user:bob
+organization:acme#member@user:charlie
+organization:acme#member@user:dave
+organization:acme#member@user:eve
+
+# Team: backend (charlie + dave)
+team:backend#org@organization:acme
+team:backend#member@user:charlie
+team:backend#member@user:dave
+
+# Repo: api — bob maintains, eve reads, backend team reads
+repository:api#org@organization:acme
+repository:api#maintainer@user:bob
+repository:api#reader@user:eve
+repository:api#reader_team@team:backend
+
+# Repo: private — org-admins only (no direct grants)
+repository:private#org@organization:acme
+```
+
+### BUILD.bazel
+
+```python
+load("@rules_spicedb//:defs.bzl",
+    "spicedb_schema", "spicedb_relationships", "spicedb_test")
+
+spicedb_schema(
+    name = "platform_schema",
+    srcs = ["schema/platform.zed"],
+)
+
+spicedb_relationships(
+    name   = "platform_seed",
+    schema = ":platform_schema",
+    srcs   = ["seed/platform.txt"],
+)
+
+spicedb_test(
+    name          = "platform_access_test",
+    schema        = ":platform_schema",
+    relationships = ":platform_seed",
+    srcs          = ["platform_access_test.sh"],
+    size          = "medium",
+)
+```
+
+### Test script
+
+**platform_access_test.sh**:
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+require_env() { [[ -n "${!1:-}" ]] || { echo "ERROR: \$$1 not set" >&2; exit 1; }; }
+require_env SPICEDB_GRPC_ADDR
+require_env SPICEDB_PRESHARED_KEY
+require_env ZED_BIN
+
+PASS=0; FAIL=0
+
+check_permission() {
+    local object="$1" perm="$2" subject="$3" expected="${4:-true}"
+    local result
+    result=$("$ZED_BIN" permission check "$object" "$perm" "$subject" \
+        --endpoint="$SPICEDB_GRPC_ADDR" --token="$SPICEDB_PRESHARED_KEY" --insecure 2>&1)
+    if echo "$result" | grep -qi "$expected"; then
+        echo "PASS  [$perm] $subject on $object → $expected"
+        PASS=$(( PASS + 1 ))
+    else
+        echo "FAIL  [$perm] $subject on $object → expected $expected, got: $result" >&2
+        FAIL=$(( FAIL + 1 ))
+    fi
+}
+
+echo "=== Direct grants ==="
+check_permission repository:api maintain user:bob true   # direct maintainer
+check_permission repository:api write    user:bob true   # maintain ⊇ write
+check_permission repository:api read     user:bob true   # maintain ⊇ read
+check_permission repository:api read     user:eve true   # direct reader
+check_permission repository:api write    user:eve false  # reader cannot write
+check_permission repository:api maintain user:eve false  # reader cannot maintain
+
+echo "=== Org admin inheritance ==="
+check_permission repository:api     maintain user:alice true   # org admin
+check_permission repository:private maintain user:alice true   # org admin on all repos
+check_permission repository:private read     user:alice true
+check_permission repository:private maintain user:bob   false  # bob is not org admin
+check_permission repository:private read     user:bob   false
+
+echo "=== Team delegation ==="
+check_permission repository:api read  user:charlie true   # via team:backend
+check_permission repository:api write user:charlie false  # teams only get read
+check_permission repository:api read  user:dave    true   # via team:backend
+check_permission repository:private read user:dave false  # team not in private
+
+echo "=== Org admin leads all teams ==="
+check_permission team:backend membership user:alice   true   # org admin
+check_permission team:backend membership user:charlie true   # direct member
+check_permission team:backend membership user:bob     false  # org member, not admin
+
+echo ""
+echo "Passed: $PASS  Failed: $FAIL"
+[[ $FAIL -eq 0 ]] || exit 1
+echo "ALL PASS"
+```
+
+### What gets verified
+
+| Check | Why |
+|-------|-----|
+| `bob maintain api` | Direct `maintainer` grant |
+| `bob write/read api` | `maintain` subsumes `write` subsumes `read` |
+| `eve read api` | Direct `reader` grant |
+| `eve write/maintain api` — denied | No write/maintain grant |
+| `alice maintain api/private` | Org admin → `org->admin_access` |
+| `bob maintain/read private` — denied | Not org admin, no direct grant |
+| `charlie/dave read api` | `team:backend` is `reader_team` on `api` |
+| `charlie write api` — denied | Team only gets `read` |
+| `dave read private` — denied | Team not listed on `private` |
+| `alice membership backend` | Org admin inherits team membership |
+| `bob membership backend` — denied | Org member, not admin |
 
 ## Rules reference
 
@@ -120,7 +293,7 @@ spicedb_schema(
 
 ### `spicedb_relationships`
 
-Declares relationship tuple files to load after schema is written.
+Declares relationship tuple files to load after the schema is written.
 
 ```python
 spicedb_relationships(
@@ -167,8 +340,8 @@ spicedb_health_check(
 
 ### Environment variables
 
-The following variables are set in test binaries and written to the `.env` file
-for `spicedb_server`:
+The following variables are injected into test binaries and written to the
+`.env` file for `spicedb_server`:
 
 | Variable                | Example                    | Description                    |
 |-------------------------|----------------------------|--------------------------------|
@@ -216,31 +389,11 @@ In your service test:
 # Source SpiceDB connection details written by spicedb_server
 source "$TEST_TMPDIR/authz.env"
 
-# Use the zed CLI via $ZED_BIN
 result=$("$ZED_BIN" permission check document:doc1 read user:alice \
     --endpoint="$ZED_ENDPOINT" --token="$ZED_TOKEN" --insecure)
 ```
 
-## Example: pod-to-pod (permission check in a test)
-
-### Relationship file format
-
-Each line in a relationship file is a SpiceDB tuple:
-```
-# Comments start with #
-<object_type>:<object_id>#<relation>@<subject_type>:<subject_id>
-
-# Examples:
-document:report#owner@user:alice
-document:report#viewer@user:bob
-team:eng#member@user:alice
-team:eng#member@user:bob
-
-# Wildcards (all users of a type):
-document:public#viewer@user:*
-```
-
-### Using a Go test
+## Using a Go test
 
 ```python
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
@@ -261,7 +414,6 @@ spicedb_test(
 ```
 
 ```go
-// authz_test.go
 package authz_test
 
 import (
@@ -282,6 +434,22 @@ func TestPermissions(t *testing.T) {
     )
     // ... test permissions
 }
+```
+
+## Relationship file format
+
+Each line in a relationship file is a SpiceDB tuple:
+```
+# Comments start with #
+<object_type>:<object_id>#<relation>@<subject_type>:<subject_id>
+
+# Examples:
+document:report#owner@user:alice
+document:report#viewer@user:bob
+team:eng#member@user:alice
+
+# Wildcards (all users of a type):
+document:public#viewer@user:*
 ```
 
 ## Binary acquisition

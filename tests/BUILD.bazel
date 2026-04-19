@@ -21,6 +21,17 @@ spicedb_relationships(
     srcs   = ["seed/relationships.txt"],
 )
 
+spicedb_schema(
+    name = "platform_schema",
+    srcs = ["schema/platform.zed"],
+)
+
+spicedb_relationships(
+    name   = "platform_seed",
+    schema = ":platform_schema",
+    srcs   = ["seed/platform.txt"],
+)
+
 # ---------------------------------------------------------------------------
 # spicedb_test targets (each gets its own ephemeral SpiceDB instance)
 # ---------------------------------------------------------------------------
@@ -38,6 +49,15 @@ spicedb_test(
     relationships = ":example_seed",
     srcs          = ["seed_smoke_test.sh"],
     # Verifies relationships exist and permissions resolve correctly.
+)
+
+spicedb_test(
+    name          = "platform_access_test",
+    schema        = ":platform_schema",
+    relationships = ":platform_seed",
+    srcs          = ["platform_access_test.sh"],
+    size          = "medium",
+    # Multi-type schema: org/team/repo with hierarchical permission inheritance.
 )
 
 # ---------------------------------------------------------------------------

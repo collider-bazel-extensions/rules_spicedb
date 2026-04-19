@@ -1,0 +1,66 @@
+/**
+ * Platform access control schema.
+ *
+ * Models a GitHub-style permission system:
+ *   - organizations have admins and members
+ *   - teams belong to an organization and have members
+ *   - repositories belong to an organization and grant fine-grained access
+ *     to individual users and teams
+ *
+ * Permission hierarchy:
+ *   maintain > write > read
+ *
+ * Org admins automatically have maintain on all org repositories.
+ * Teams can be granted read access to a repository; team members
+ * inherit that access.
+ */
+
+definition user {}
+
+definition organization {
+    relation admin:  user
+    relation member: user
+
+    /**
+     * admin_access: used by repository to grant org admins full maintain rights.
+     */
+    permission admin_access = admin
+
+    /**
+     * access: any org member or admin.
+     */
+    permission access = member + admin
+}
+
+definition team {
+    relation org:    organization
+    relation member: user
+
+    /**
+     * membership: team members plus org admins (admins implicitly lead all teams).
+     */
+    permission membership = member + org->admin_access
+}
+
+definition repository {
+    relation org:         organization
+    relation maintainer:  user
+    relation writer:      user
+    relation reader:      user
+    relation reader_team: team
+
+    /**
+     * maintain: direct maintainers + org admins.
+     */
+    permission maintain = maintainer + org->admin_access
+
+    /**
+     * write: writers + anyone with maintain.
+     */
+    permission write = writer + maintain
+
+    /**
+     * read: readers + reader_team members + anyone with write.
+     */
+    permission read = reader + reader_team->membership + write
+}

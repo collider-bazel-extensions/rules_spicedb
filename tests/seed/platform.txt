@@ -1,0 +1,39 @@
+# Platform access control seed data.
+#
+# Org: acme
+#   admins:  alice
+#   members: bob, charlie, dave, eve
+#
+# Team: backend (acme org)
+#   members: charlie, dave
+#
+# Repo: api (acme org)
+#   maintainer: bob
+#   writer:     (none beyond bob's maintainer role)
+#   reader:     eve
+#   reader_team: backend
+#
+# Repo: private (acme org)
+#   maintainer: (none; only alice via org admin)
+#   (no team or reader access)
+
+# Organization memberships
+organization:acme#admin@user:alice
+organization:acme#member@user:bob
+organization:acme#member@user:charlie
+organization:acme#member@user:dave
+organization:acme#member@user:eve
+
+# Team memberships
+team:backend#org@organization:acme
+team:backend#member@user:charlie
+team:backend#member@user:dave
+
+# Repository: api
+repository:api#org@organization:acme
+repository:api#maintainer@user:bob
+repository:api#reader@user:eve
+repository:api#reader_team@team:backend
+
+# Repository: private (org-admins-only; no direct grants)
+repository:private#org@organization:acme

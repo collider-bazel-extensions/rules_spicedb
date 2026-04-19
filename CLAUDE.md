@@ -34,9 +34,11 @@ rules_spicedb/
 └── tests/
     ├── BUILD.bazel
     ├── schema/               # Example .zed schema files
-    │   └── example.zed
+    │   ├── example.zed       # Simple document/user schema
+    │   └── platform.zed      # Complex org/team/repo schema
     └── seed/                 # Example relationship files
-        └── relationships.txt
+        ├── relationships.txt # Seed for example_schema
+        └── platform.txt      # Seed for platform_schema (5 users, 2 teams, 2 repos)
 ```
 
 ## Key concepts
@@ -240,14 +242,17 @@ sudo dnf install spicedb zed
 
 All tests must pass before any commit with code changes.
 
-### Test results (last full run: TBD)
+### Test results (last full run: 2026-04-19)
 
-| Test target                         | What it verifies                                              |
-|-------------------------------------|---------------------------------------------------------------|
-| `//tests:schema_smoke_test`         | Schema written; `zed schema read` returns expected definitions |
-| `//tests:seed_smoke_test`           | Relationships loaded; `zed permission check` resolves correctly |
-| `//tests:spicedb_health_check_test` | Health check exits non-zero without env file, 0 when present  |
-| `//tests:spicedb_server_test`       | spicedb_server starts, writes env file, SIGTERM shuts down    |
+All 5 tests pass on Linux x86_64 with SpiceDB v1.51.1 and zed v0.22.0.
+
+| Test target                         | What it verifies                                                       | Result |
+|-------------------------------------|------------------------------------------------------------------------|--------|
+| `//tests:schema_smoke_test`         | Schema written; `zed schema read` returns expected definitions         | PASSED |
+| `//tests:seed_smoke_test`           | Relationships loaded; `zed permission check` resolves correctly        | PASSED |
+| `//tests:platform_access_test`      | Org/team/repo hierarchy: 22 permission assertions across 5 users       | PASSED |
+| `//tests:spicedb_health_check_test` | Health check exits non-zero without env file, 0 when present          | PASSED |
+| `//tests:spicedb_server_test`       | spicedb_server starts, writes env file, SIGTERM shuts down cleanly     | PASSED |
 
 ### Launcher script
 
@@ -264,7 +269,7 @@ Both modes share `_spicedb_setup`, which:
 2. Resolves all runfile paths.
 3. Ensures spicedb and zed binaries have the execute bit set.
 4. Finds a free TCP port and starts `spicedb serve-testing`.
-5. Polls via `zed schema read` until the server is ready (max 30 s).
+5. Polls via TCP connect until the gRPC port accepts connections (max 30 s).
 6. Generates a `zed import` YAML from schema and relationship files.
 7. Calls `zed import` to write schema and relationships atomically.
 8. Retries on port conflicts (max 5 attempts); fails immediately on other errors.
