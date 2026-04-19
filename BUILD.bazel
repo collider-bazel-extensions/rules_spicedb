@@ -78,9 +78,3 @@ alias(
     actual     = ":spicedb_1_30",
     visibility = ["//visibility:public"],
 )
-
-# ---------------------------------------------------------------------------
-# Expose launcher.py from //private so rules can reference it
-# ---------------------------------------------------------------------------
-
-exports_files(["private/launcher.py"])

@@ -100,12 +100,18 @@ def _find_free_port():
 # SpiceDB lifecycle
 # ---------------------------------------------------------------------------
 
-def _start_spicedb(spicedb_bin, grpc_port, preshared_key, log_file):
-    """Start spicedb serve-testing. Returns a Popen object."""
+def _start_spicedb(spicedb_bin, grpc_port, readonly_port, log_file):
+    """Start spicedb serve-testing. Returns a Popen object.
+
+    serve-testing accepts any bearer token; each unique token gets its own
+    isolated in-memory datastore.  No --grpc-preshared-key flag exists.
+    Both the main and readonly gRPC servers need random ports to avoid
+    conflicts when tests run in parallel.
+    """
     cmd = [
         spicedb_bin, "serve-testing",
         f"--grpc-addr=:{grpc_port}",
-        f"--grpc-preshared-key={preshared_key}",
+        f"--readonly-grpc-addr=:{readonly_port}",
         "--skip-release-check",
     ]
     _log(f"starting spicedb serve-testing on port {grpc_port}...")
@@ -116,28 +122,20 @@ def _start_spicedb(spicedb_bin, grpc_port, preshared_key, log_file):
     )
 
 
-def _wait_spicedb_ready(zed_bin, endpoint, token, timeout=30):
-    """Poll via zed schema read until SpiceDB is accepting requests."""
+def _wait_spicedb_ready(endpoint, timeout=30):
+    """Poll TCP until SpiceDB's gRPC port is accepting connections."""
     _log("waiting for SpiceDB gRPC endpoint...")
-    env = {**os.environ,
-           "ZED_ENDPOINT": endpoint,
-           "ZED_TOKEN": token,
-           "ZED_INSECURE": "true"}
+    host, _, port_str = endpoint.rpartition(":")
     deadline = time.monotonic() + timeout
-    last_err = ""
     while time.monotonic() < deadline:
-        result = subprocess.run(
-            [zed_bin, "schema", "read"],
-            capture_output=True, text=True, env=env,
-        )
-        if result.returncode == 0:
-            _log("SpiceDB is ready")
-            return
-        last_err = (result.stderr or result.stdout).strip()
-        time.sleep(0.5)
+        try:
+            with socket.create_connection((host, int(port_str)), timeout=1):
+                _log("SpiceDB is ready")
+                return
+        except (ConnectionRefusedError, OSError):
+            time.sleep(0.5)
     raise TimeoutError(
-        f"SpiceDB did not become ready within {timeout}s.\n"
-        f"Last error: {last_err}"
+        f"SpiceDB gRPC endpoint {endpoint} did not become ready within {timeout}s"
     )
 
 
@@ -245,13 +243,14 @@ def _spicedb_setup(m, workspace, test_tmpdir):
     max_attempts = 5
     proc = None
     for attempt in range(max_attempts):
-        grpc_port = _find_free_port()
-        endpoint  = f"localhost:{grpc_port}"
-        log_file  = os.path.join(test_tmpdir, "spicedb.log")
+        grpc_port     = _find_free_port()
+        readonly_port = _find_free_port()
+        endpoint      = f"localhost:{grpc_port}"
+        log_file      = os.path.join(test_tmpdir, "spicedb.log")
 
-        proc = _start_spicedb(spicedb_bin, grpc_port, preshared_key, log_file)
+        proc = _start_spicedb(spicedb_bin, grpc_port, readonly_port, log_file)
         try:
-            _wait_spicedb_ready(zed_bin, endpoint, preshared_key, timeout=30)
+            _wait_spicedb_ready(endpoint, timeout=30)
         except TimeoutError:
             proc.terminate()
             proc.wait()
