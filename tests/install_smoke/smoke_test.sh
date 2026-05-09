@@ -109,7 +109,7 @@ echo "smoke: creating relationship document:doc1#viewer@user:alice"
 zed relationship create document:doc1 viewer user:alice --insecure
 
 echo "smoke: checking permission document:doc1#view@user:alice"
-result=$(zed permission check document:doc1 view user:alice --insecure 2>&1 || true)
+result=$(zed permission check document:doc1 view user:alice --insecure --consistency-full 2>&1 || true)
 if ! grep -qi "true\|HAS_PERMISSION" <<<"$result"; then
   echo "smoke: FAIL — expected permission ALLOWED, got:" >&2
   echo "$result" >&2
@@ -118,7 +118,7 @@ fi
 echo "smoke: zed permission check returned: $(head -1 <<<"$result")"
 
 echo "smoke: checking permission document:doc1#view@user:bob (negative)"
-result_neg=$(zed permission check document:doc1 view user:bob --insecure 2>&1 || true)
+result_neg=$(zed permission check document:doc1 view user:bob --insecure --consistency-full 2>&1 || true)
 if ! grep -qi "false\|NO_PERMISSION" <<<"$result_neg"; then
   echo "smoke: FAIL — expected permission DENIED for bob, got:" >&2
   echo "$result_neg" >&2
