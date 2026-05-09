@@ -47,8 +47,14 @@ jobs:
             //tests:test_server_health \
             //tests/install_smoke:smoke_test
 
-      - name: bazel test (analysis only)
-        run: bazel test //... --test_tag_filters=-manual --test_output=errors
+      # Same constraint as the build step — `bazel test //...`
+      # analyzes the wrong-platform binary repos and fails. Target the
+      # tests packages only.
+      - name: bazel test (analysis only, linux targets)
+        run: |
+          bazel test //tests/... \
+              --test_tag_filters=-manual \
+              --test_output=errors
 
       - name: Upload test logs on failure
         if: failure()
