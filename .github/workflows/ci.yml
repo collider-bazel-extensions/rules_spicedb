@@ -21,15 +21,14 @@ jobs:
 
       # The system-mode `spicedb` toolchain looks for spicedb + zed
       # on $PATH. Install both so analysis of the pre-existing
-      # test-time targets passes.
+      # test-time targets passes. Versions match `spicedb.system(versions
+      # = ["1.30"])` in MODULE.bazel — bump in lockstep.
       - name: Install spicedb + zed binaries
         run: |
           set -euo pipefail
-          SPICEDB_VERSION=v1.30.0
-          ZED_VERSION=v0.20.0
-          curl -sSfL "https://github.com/authzed/spicedb/releases/download/${SPICEDB_VERSION}/spicedb_$(echo ${SPICEDB_VERSION#v})_linux_amd64.tar.gz" \
+          curl -sSfL "https://github.com/authzed/spicedb/releases/download/v1.30.1/spicedb_1.30.1_linux_amd64.tar.gz" \
             | sudo tar -xz -C /usr/local/bin spicedb
-          curl -sSfL "https://github.com/authzed/zed/releases/download/${ZED_VERSION}/zed_$(echo ${ZED_VERSION#v})_linux_amd64.tar.gz" \
+          curl -sSfL "https://github.com/authzed/zed/releases/download/v0.36.1/zed_0.36.1_linux_amd64_gnu.tar.gz" \
             | sudo tar -xz -C /usr/local/bin zed
           sudo chmod +x /usr/local/bin/spicedb /usr/local/bin/zed
           spicedb version
@@ -66,16 +65,9 @@ jobs:
           disk-cache: ${{ github.workflow }}-install-smoke
           repository-cache: true
 
-      - name: Install spicedb + zed (host-side, for analysis only)
-        run: |
-          set -euo pipefail
-          SPICEDB_VERSION=v1.30.0
-          ZED_VERSION=v0.20.0
-          curl -sSfL "https://github.com/authzed/spicedb/releases/download/${SPICEDB_VERSION}/spicedb_$(echo ${SPICEDB_VERSION#v})_linux_amd64.tar.gz" \
-            | sudo tar -xz -C /usr/local/bin spicedb
-          curl -sSfL "https://github.com/authzed/zed/releases/download/${ZED_VERSION}/zed_$(echo ${ZED_VERSION#v})_linux_amd64.tar.gz" \
-            | sudo tar -xz -C /usr/local/bin zed
-          sudo chmod +x /usr/local/bin/spicedb /usr/local/bin/zed
+      # The install smoke job only builds the install_smoke targets
+      # (no host-side spicedb toolchain dependency). Skip the
+      # spicedb/zed install — they'd just slow the runner.
 
       - name: Verify Docker is available
         run: docker version
