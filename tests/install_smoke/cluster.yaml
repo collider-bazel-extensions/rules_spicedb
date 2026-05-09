@@ -1,0 +1,38 @@
+# Smoke fixture for the install-path E2E.
+#
+# Memory-backed SpiceDBCluster — single replica, ephemeral. The
+# operator reconciles this CR into a Deployment + Service. Memory
+# datastore is the simplest path for a smoke fixture: no postgres
+# or cockroachdb dependency. Production deploys use postgres
+# (compose with rules_cloudnativepg) or cockroachdb.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: spicedb-smoke
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: spicedb-secret
+  namespace: spicedb-smoke
+stringData:
+  # Required: shared key the API server uses to authenticate clients.
+  # Production reads this from a real secret store; the smoke just
+  # checks that auth is wired up by including it in zed calls.
+  preshared_key: smoke-fixture-preshared-key-do-not-use-in-prod
+---
+apiVersion: authzed.com/v1alpha1
+kind: SpiceDBCluster
+metadata:
+  name: smoke
+  namespace: spicedb-smoke
+spec:
+  config:
+    # The smoke uses memory backend — no DB, single replica, all
+    # in-process. Operator does still reconcile the Cluster CR
+    # into a real Deployment + Service.
+    datastoreEngine: memory
+    # Avoid kind ephemeral-storage refusals by zeroing the resource
+    # requests; the operator's defaults can be high.
+  secretName: spicedb-secret

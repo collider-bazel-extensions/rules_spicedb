@@ -1,6 +1,6 @@
 module(
     name = "rules_spicedb",
-    version = "0.1.1",
+    version = "0.2.0",
 )
 
 bazel_dep(name = "bazel_skylib", version = "1.5.0")
@@ -13,10 +13,29 @@ bazel_dep(name = "platforms", version = "0.0.9")
 # something else.
 bazel_dep(name = "rules_shell", version = "0.8.0")
 
+# v0.2: cluster-deploy primitives (`spicedb_install` /
+# `spicedb_health_check`) compose with rules_kubectl's kubectl_apply.
+bazel_dep(name = "rules_kubectl", version = "0.2.0")
+git_override(
+    module_name = "rules_kubectl",
+    remote = "https://github.com/collider-bazel-extensions/rules_kubectl",
+    commit = "81b60ab80df46b64c612f2576ffef0a7af98ccb6",  # v0.2.0
+)
+
 spicedb = use_extension("//:extensions.bzl", "spicedb")
 spicedb.system(versions = ["1.30"])
 use_repo(spicedb,
     "spicedb_1_30_linux_amd64",
     "spicedb_1_30_darwin_arm64",
     "spicedb_1_30_darwin_amd64",
+)
+
+# ---- dev-only: smoke composition for the install path ----------------------
+bazel_dep(name = "rules_itest", version = "0.0.52", dev_dependency = True)
+
+bazel_dep(name = "rules_kind", version = "0.1.2", dev_dependency = True)
+git_override(
+    module_name = "rules_kind",
+    remote = "https://github.com/collider-bazel-extensions/rules_kind",
+    commit = "b9c4670646f8e3772816f56a048e311d5310a763",  # v0.1.2
 )

@@ -1,0 +1,13 @@
+// Smoke schema for the install-path E2E.
+//
+// Same shape as v0.1's tests/schema/example.zed but standalone for
+// the install smoke. Defines a tiny authz model the smoke writes
+// + checks.
+
+definition user {}
+
+definition document {
+    relation viewer: user
+
+    permission view = viewer
+}

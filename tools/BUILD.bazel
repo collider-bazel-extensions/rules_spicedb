@@ -1,0 +1,7 @@
+"""Maintainer-only: spicedb-operator bundle is curled directly,
+no bazel render target needed (mirrors rules_tekton)."""
+
+exports_files([
+    "render_spicedb_operator.sh",
+    "versions.bzl",
+])

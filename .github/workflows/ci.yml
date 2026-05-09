@@ -1,0 +1,95 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  analysis:
+    name: bazel test (ubuntu-latest, analysis)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bazel-contrib/setup-bazel@0.15.0
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}-analysis
+          repository-cache: true
+
+      # The system-mode `spicedb` toolchain looks for spicedb + zed
+      # on $PATH. Install both so analysis of the pre-existing
+      # test-time targets passes.
+      - name: Install spicedb + zed binaries
+        run: |
+          set -euo pipefail
+          SPICEDB_VERSION=v1.30.0
+          ZED_VERSION=v0.20.0
+          curl -sSfL "https://github.com/authzed/spicedb/releases/download/${SPICEDB_VERSION}/spicedb_$(echo ${SPICEDB_VERSION#v})_linux_amd64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin spicedb
+          curl -sSfL "https://github.com/authzed/zed/releases/download/${ZED_VERSION}/zed_$(echo ${ZED_VERSION#v})_linux_amd64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin zed
+          sudo chmod +x /usr/local/bin/spicedb /usr/local/bin/zed
+          spicedb version
+          zed version
+
+      - name: bazel build //...
+        run: bazel build //...
+
+      - name: bazel test (analysis only)
+        run: bazel test //... --test_tag_filters=-manual --test_output=errors
+
+      - name: Install smoke composition builds
+        run: bazel build //tests/install_smoke:smoke_test
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bazel-testlogs-analysis
+          path: bazel-testlogs/
+          if-no-files-found: ignore
+
+  install_smoke:
+    # End-to-end install smoke: kind + spicedb-operator install +
+    # SpiceDBCluster reconciliation + zed schema write + permission
+    # check (positive + negative).
+    name: install smoke (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bazel-contrib/setup-bazel@0.15.0
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}-install-smoke
+          repository-cache: true
+
+      - name: Install spicedb + zed (host-side, for analysis only)
+        run: |
+          set -euo pipefail
+          SPICEDB_VERSION=v1.30.0
+          ZED_VERSION=v0.20.0
+          curl -sSfL "https://github.com/authzed/spicedb/releases/download/${SPICEDB_VERSION}/spicedb_$(echo ${SPICEDB_VERSION#v})_linux_amd64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin spicedb
+          curl -sSfL "https://github.com/authzed/zed/releases/download/${ZED_VERSION}/zed_$(echo ${ZED_VERSION#v})_linux_amd64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin zed
+          sudo chmod +x /usr/local/bin/spicedb /usr/local/bin/zed
+
+      - name: Verify Docker is available
+        run: docker version
+
+      - name: bazel test //tests/install_smoke:smoke_test
+        # kind boot (~30s) + operator image pull (~50 MB) +
+        # SpiceDBCluster reconciliation + memory-backed pod startup +
+        # zed pod (~50 MB) + schema write + permission checks.
+        run: bazel test //tests/install_smoke:smoke_test --test_output=streamed --test_timeout=900
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bazel-testlogs-install-smoke
+          path: bazel-testlogs/
+          if-no-files-found: ignore
