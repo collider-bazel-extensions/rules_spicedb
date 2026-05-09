@@ -93,6 +93,12 @@ if ! (echo > /dev/tcp/localhost/50051) >/dev/null 2>&1; then
   exit 1
 fi
 
+# zed prompts interactively for a keyring passphrase on first context
+# creation. CI has no TTY and zed errors with "inappropriate ioctl for
+# device". ZED_KEYRING_PASSWORD bypasses the prompt — zed uses the env
+# var as the encryption key for the on-disk credential file.
+export ZED_KEYRING_PASSWORD="smoke-fixture-keyring-password"
+
 echo "smoke: configuring zed context"
 zed context set smoke localhost:50051 "$PSK" --insecure
 

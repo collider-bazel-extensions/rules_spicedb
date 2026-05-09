@@ -34,14 +34,21 @@ jobs:
           spicedb version
           zed version
 
-      - name: bazel build //...
-        run: bazel build //...
+      # `bazel build //...` analyzes ALL platforms' spicedb_binary_files
+      # targets, including darwin_arm64 / darwin_amd64 which can't be
+      # populated on a linux runner (the system extension symlinks the
+      # host's spicedb, so cross-platform repos stay empty and
+      # `_require("spicedb")` fails). Build targeted paths instead.
+      - name: bazel build (linux targets only)
+        run: |
+          bazel build \
+            //:spicedb_1_30 \
+            //tests:test_server \
+            //tests:test_server_health \
+            //tests/install_smoke:smoke_test
 
       - name: bazel test (analysis only)
         run: bazel test //... --test_tag_filters=-manual --test_output=errors
-
-      - name: Install smoke composition builds
-        run: bazel build //tests/install_smoke:smoke_test
 
       - name: Upload test logs on failure
         if: failure()
