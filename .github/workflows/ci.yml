@@ -65,9 +65,19 @@ jobs:
           disk-cache: ${{ github.workflow }}-install-smoke
           repository-cache: true
 
-      # The install smoke job only builds the install_smoke targets
-      # (no host-side spicedb toolchain dependency). Skip the
-      # spicedb/zed install — they'd just slow the runner.
+      # The smoke needs zed on the runner: it port-forwards the
+      # in-cluster SpiceDB Service to localhost and drives schema
+      # writes + permission checks via zed CLI. (kubectl-exec'ing
+      # a zed pod fails because authzed/zed:latest is a from-scratch
+      # image without /bin/sh — kubectl run --command -- sleep 600
+      # has nothing to run.)
+      - name: Install zed CLI
+        run: |
+          set -euo pipefail
+          curl -sSfL "https://github.com/authzed/zed/releases/download/v0.36.1/zed_0.36.1_linux_amd64_gnu.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin zed
+          sudo chmod +x /usr/local/bin/zed
+          zed version
 
       - name: Verify Docker is available
         run: docker version
