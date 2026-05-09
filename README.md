@@ -1,21 +1,46 @@
 # rules_spicedb
 
-Bazel rules for running [SpiceDB](https://authzed.com/spicedb) in tests.
-Provides hermetic, parallel-safe SpiceDB instances for `*_test` targets with
-zero external infrastructure — uses `spicedb serve-testing` (in-memory, no
-backend required). Designed for use with
-[rules_itest](https://github.com/dzbarsky/rules_itest).
+Bazel rules for [SpiceDB](https://authzed.com/spicedb) — two families
+of primitives:
+
+- **Test-time** (v0.1): hermetic, parallel-safe SpiceDB instances
+  via `spicedb serve-testing` (in-memory, ~1s startup). Designed for
+  `*_test` targets and `rules_itest` compositions.
+- **Install-time** (v0.2): `spicedb_install` /
+  `spicedb_install_health_check` deploys the
+  [spicedb-operator](https://github.com/authzed/spicedb-operator) to
+  a real cluster. Drops into `itest_service.exe` /
+  `.health_check`. Sibling to the test primitives in the same
+  package.
 
 ## Features
 
-- **`spicedb_test`** — wrap any `*_test` rule with an ephemeral SpiceDB
-  instance; schema and relationships loaded before the test binary runs
-- **`spicedb_server`** + **`spicedb_health_check`** — long-running server for
-  `rules_itest` multi-service tests
-- **Parallel-safe** — every test target gets its own server on a unique port
-- **`~1 s` startup** — `spicedb serve-testing` is in-memory with no disk setup
-- **System or downloaded binaries** — symlink host-installed `spicedb`/`zed`
-  or download tarballs from GitHub
+### Test-time (v0.1)
+
+- **`spicedb_test`** — wrap any `*_test` rule with an ephemeral
+  SpiceDB instance; schema and relationships loaded before the test
+  binary runs.
+- **`spicedb_server`** + **`spicedb_health_check`** — long-running
+  server for `rules_itest` multi-service tests.
+- **Parallel-safe** — every test target gets its own server on a
+  unique port.
+- **`~1 s` startup** — in-memory, no disk setup.
+- **System or downloaded binaries** — symlink host-installed
+  `spicedb` / `zed` or download tarballs from GitHub.
+
+### Install-time (v0.2)
+
+- **`spicedb_install`** — `kubectl_apply` over a vendored
+  spicedb-operator bundle. Wait shape: `spicedb-operator`
+  Deployment + `spicedbclusters.authzed.com` CRD. Pinned to operator
+  `v1.25.0`.
+- **`spicedb_install_health_check`** — paired readiness probe (named
+  with `_install_` to avoid colliding with the test-time
+  `spicedb_health_check`).
+- **Vendored `bundle.yaml`** — pinned URL + sha256 in
+  `tools/versions.bzl`. Re-render via
+  `bash tools/render_spicedb_operator.sh <version>`.
+- See [Install primitives](#install-primitives) below for usage.
 
 ## Quick start
 
@@ -23,7 +48,7 @@ backend required). Designed for use with
 
 **MODULE.bazel (Bzlmod)**:
 ```python
-bazel_dep(name = "rules_spicedb", version = "0.1.0")
+bazel_dep(name = "rules_spicedb", version = "0.2.0")
 
 spicedb = use_extension("@rules_spicedb//:extensions.bzl", "spicedb")
 spicedb.system(versions = ["1.30"])
@@ -275,6 +300,103 @@ echo "ALL PASS"
 | `dave read private` — denied | Team not listed on `private` |
 | `alice membership backend` | Org admin inherits team membership |
 | `bob membership backend` — denied | Org member, not admin |
+
+## Install primitives
+
+For deploying SpiceDB itself to a Kubernetes cluster (vs running
+ephemeral instances in tests), v0.2 adds install-time primitives.
+
+### `spicedb_install`
+
+Vendors and applies the
+[spicedb-operator](https://github.com/authzed/spicedb-operator)
+`bundle.yaml`. The operator reconciles consumer-authored
+`SpiceDBCluster` CRs into Deployments, Services, ConfigMaps —
+the actual SpiceDB workload runs in pods the operator manages.
+
+```python
+load("@rules_spicedb//:defs.bzl",
+     "spicedb_install", "spicedb_install_health_check")
+
+spicedb_install(
+    name = "spicedb_install_bin",
+    namespace = "spicedb-operator",   # default
+    wait_timeout = "300s",            # default
+)
+
+spicedb_install_health_check(
+    name = "spicedb_install_health_bin",
+)
+```
+
+Drops into `itest_service.exe` / `.health_check`:
+
+```python
+load("@rules_itest//:itest.bzl", "itest_service")
+load("@rules_kind//:defs.bzl", "kind_cluster", "kind_health_check")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+
+kind_cluster(name = "cluster", k8s_version = "1.32")
+kind_health_check(name = "cluster_health", cluster = ":cluster")
+itest_service(name = "kind_svc", exe = ":cluster", health_check = ":cluster_health")
+
+spicedb_install(name = "spicedb_install_bin")
+spicedb_install_health_check(name = "spicedb_install_health_bin")
+sh_binary(name = "spicedb_install_wrapper",
+          srcs = ["install_wrapper.sh"],
+          data = [":spicedb_install_bin"])
+sh_binary(name = "spicedb_install_health_wrapper",
+          srcs = ["health_wrapper.sh"],
+          data = [":spicedb_install_health_bin"])
+
+itest_service(
+    name = "spicedb_install_svc",
+    exe = ":spicedb_install_wrapper",
+    deps = [":kind_svc"],
+    health_check = ":spicedb_install_health_wrapper",
+)
+```
+
+After the install service is healthy, consumers apply their own
+`SpiceDBCluster` CRs:
+
+```yaml
+apiVersion: authzed.com/v1alpha1
+kind: SpiceDBCluster
+metadata:
+  name: my-spicedb
+  namespace: my-app
+spec:
+  config:
+    datastoreEngine: postgres        # or memory, cockroachdb, mysql
+  # references a Secret with `preshared_key` (and `datastore_uri` for non-memory)
+  secretName: my-spicedb-secret
+```
+
+The operator reconciles each SpiceDBCluster into a Deployment
+named `<cluster>-spicedb` and a Service named `<cluster>` exposing
+gRPC :50051 / HTTP :8443 / metrics :9090.
+
+> **`SpiceDBCluster` CRD reference**: see
+> [authzed/spicedb-operator config docs](https://github.com/authzed/spicedb-operator/blob/main/CONFIGURATION.md).
+> The smoke fixture in `tests/install_smoke/cluster.yaml` shows
+> the minimal memory-backend shape used by the in-tree CI.
+
+### Production-shape backend
+
+The smoke uses `datastoreEngine: memory` for simplicity (single
+replica, ephemeral). Real production uses `postgres` or
+`cockroachdb` — compose with
+[`rules_cloudnativepg`](https://github.com/collider-bazel-extensions/rules_cloudnativepg)
+or a managed-DB bring-your-own pattern.
+
+### Naming asymmetry
+
+Install primitives are named `spicedb_install` /
+`spicedb_install_health_check` (not `spicedb_health_check`) to
+avoid colliding with v0.1's `spicedb_health_check`, which pairs
+with the test-time `spicedb_server`. Both health checks coexist;
+pick the one matching your install vs test composition.
 
 ## Rules reference
 
