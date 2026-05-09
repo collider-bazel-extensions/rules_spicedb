@@ -26,7 +26,7 @@ def _spicedb_server_impl(ctx):
         preshared_key      = ctx.attr.preshared_key,
     )
     manifest = ctx.actions.declare_file(ctx.label.name + "_spicedb_manifest.json")
-    ctx.actions.write(output = manifest, content = manifest_content.to_json())
+    ctx.actions.write(output = manifest, content = json.encode(manifest_content))
 
     launcher_src  = ctx.file.launcher
     env_file_name = ctx.label.name + ".env"

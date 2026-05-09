@@ -1,5 +1,6 @@
 "spicedb_test macro: wraps any *_test rule with an ephemeral SpiceDB instance."
 
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//private:schema.bzl", "SpiceDBSchemaInfo")
 load("//private:relationships.bzl", "SpiceDBRelationshipsInfo")
 
@@ -28,7 +29,7 @@ def _spicedb_launcher_test_impl(ctx):
     manifest = ctx.actions.declare_file(ctx.label.name + "_spicedb_manifest.json")
     ctx.actions.write(
         output  = manifest,
-        content = manifest_content.to_json(),
+        content = json.encode(manifest_content),
     )
 
     launcher_src = ctx.file.launcher
@@ -140,7 +141,11 @@ def spicedb_test(
     srcs  = srcs  or []
     deps  = deps  or []
     tags  = tags  or []
-    _test_rule = test_rule or native.sh_test
+    # Bazel 8+ removed `native.sh_test`, so the default has to load
+    # from rules_shell. Consumers can override `test_rule = ...` to
+    # point at another *_test rule (py_test, go_test, etc.) if they
+    # don't want rules_shell as a transitive dep.
+    _test_rule = test_rule or sh_test
 
     inner_name = name + "_inner"
     _test_rule(
