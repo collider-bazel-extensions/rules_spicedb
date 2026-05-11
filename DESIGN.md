@@ -176,16 +176,22 @@ Users can override with `preshared_key = "..."` on `spicedb_test` or
 
 ## Binary acquisition
 
-Two modes, mirroring rules_pg and rules_kind:
+Two modes, can coexist per minor version:
 
-| Mode        | Mechanism                                        | Use case                    |
-|-------------|--------------------------------------------------|-----------------------------|
-| `system()`  | `rctx.symlink()` to host-installed binary        | CI with pre-installed tools |
-| `version()` | `rctx.download_and_extract()` from GitHub        | Hermetic / air-gapped builds|
+| Mode        | Mechanism                                                                 | Use case                                                  |
+|-------------|---------------------------------------------------------------------------|-----------------------------------------------------------|
+| `version()` | `rctx.download_and_extract()` of GitHub release tarballs at pinned sha256s | **Default in v0.3+**. Hermetic; CI parity with local dev |
+| `system()`  | `rctx.symlink()` to host-installed binary                                  | Opt-in. Pin to a host-managed patch version              |
 
-Both `spicedb` and `zed` are discovered together (they share a version pair)
-and stored in the same repository rule per platform. Auto-detection probes
-`PATH` first, then `/usr/local/bin`, `/usr/bin`, `$HOME/.local/bin`.
+Both `spicedb` and `zed` are discovered together (they share a version pair) and stored in the same repository rule per platform. `version()` mode pulls each binary at the pinned `_SPICEDB_VERSIONS[<minor>][<plat>]` entry — sha256s come from each upstream release's `checksums.txt`. `system()` mode auto-detects from `PATH`, then probes `/usr/local/bin`, `/usr/bin`, `$HOME/.local/bin`.
+
+### v0.3.0: real shas (no more placeholders)
+
+Pre-v0.3 the `_SPICEDB_VERSIONS` table had placeholder sha256s — `version()` mode failed fast with "SHA-256 for ... is unset" — so `system()` was effectively the only working mode. v0.3.0 fills in real shas for spicedb 1.52.0 + zed 1.1.1 across linux-amd64 / darwin-amd64 / darwin-arm64.
+
+**zed Linux tarball quirk**: zed publishes both `_gnu` and `_musl` Linux tarballs. The `_gnu` variant is the default (links glibc); rules_spicedb pins that. `_musl` is for Alpine / static-only environments and is not wired today.
+
+rules_spicedb's own `MODULE.bazel` uses `spicedb.version()` so CI runs on a bare `ubuntu-latest` with NO host spicedb/zed. The workflow verifies neither binary is on PATH before `bazel test` to make the hermeticity proof unambiguous (mirror of rules_pg v0.4's hermetic-verification step).
 
 ## What was NOT implemented
 

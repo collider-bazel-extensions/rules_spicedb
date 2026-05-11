@@ -29,52 +29,52 @@ config_setting(
 )
 
 # ---------------------------------------------------------------------------
-# spicedb 1.30 binary targets
+# spicedb 1.52 binary targets
 # ---------------------------------------------------------------------------
 
 spicedb_binary_files(
-    name    = "spicedb_1_30_linux_amd64_files",
-    version = "1.30",
+    name    = "spicedb_1_52_linux_amd64_files",
+    version = "1.52",
     bins = [
-        "@spicedb_1_30_linux_amd64//:spicedb_bin",
-        "@spicedb_1_30_linux_amd64//:zed_bin",
+        "@spicedb_1_52_linux_amd64//:spicedb_bin",
+        "@spicedb_1_52_linux_amd64//:zed_bin",
     ],
     visibility = ["//visibility:private"],
 )
 
 spicedb_binary_files(
-    name    = "spicedb_1_30_darwin_arm64_files",
-    version = "1.30",
+    name    = "spicedb_1_52_darwin_arm64_files",
+    version = "1.52",
     bins = [
-        "@spicedb_1_30_darwin_arm64//:spicedb_bin",
-        "@spicedb_1_30_darwin_arm64//:zed_bin",
+        "@spicedb_1_52_darwin_arm64//:spicedb_bin",
+        "@spicedb_1_52_darwin_arm64//:zed_bin",
     ],
     visibility = ["//visibility:private"],
 )
 
 spicedb_binary_files(
-    name    = "spicedb_1_30_darwin_amd64_files",
-    version = "1.30",
+    name    = "spicedb_1_52_darwin_amd64_files",
+    version = "1.52",
     bins = [
-        "@spicedb_1_30_darwin_amd64//:spicedb_bin",
-        "@spicedb_1_30_darwin_amd64//:zed_bin",
+        "@spicedb_1_52_darwin_amd64//:spicedb_bin",
+        "@spicedb_1_52_darwin_amd64//:zed_bin",
     ],
     visibility = ["//visibility:private"],
 )
 
 spicedb_binary(
-    name    = "spicedb_1_30",
-    version = "1.30",
+    name    = "spicedb_1_52",
+    version = "1.52",
     binary  = select({
-        ":linux_amd64":  ":spicedb_1_30_linux_amd64_files",
-        ":darwin_arm64": ":spicedb_1_30_darwin_arm64_files",
-        ":darwin_amd64": ":spicedb_1_30_darwin_amd64_files",
+        ":linux_amd64":  ":spicedb_1_52_linux_amd64_files",
+        ":darwin_arm64": ":spicedb_1_52_darwin_arm64_files",
+        ":darwin_amd64": ":spicedb_1_52_darwin_amd64_files",
     }),
     visibility = ["//visibility:public"],
 )
 
 alias(
     name       = "spicedb_default",
-    actual     = ":spicedb_1_30",
+    actual     = ":spicedb_1_52",
     visibility = ["//visibility:public"],
 )

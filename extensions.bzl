@@ -1,30 +1,43 @@
-"""Bzlmod module extension: fetch or symlink spicedb + zed binaries."""
+"""Bzlmod module extension: fetch or symlink spicedb + zed binaries.
 
-# SpiceDB and zed version pairs per SpiceDB minor version.
-# spicedb binaries: https://github.com/authzed/spicedb/releases
-# zed binaries:     https://github.com/authzed/zed/releases
-# SHA-256 values are placeholders — pin real values before using spicedb.version().
+Two modes (can coexist per-version):
+  - spicedb.version(versions = [...]) — hermetic; download tarballs from
+    authzed GitHub releases at the pinned sha256s.
+  - spicedb.system(versions = [...])  — reuse the host's spicedb + zed
+    installs (e.g. `brew install authzed/tap/spicedb`).
+
+Maintainer flow for adding/bumping a minor version: run
+`tools/update_checksums.sh <spicedb-ver> <zed-ver>` which pulls the
+relevant checksums.txt from each release and rewrites the
+`_SPICEDB_VERSIONS` block here.
+"""
+
+# SpiceDB + zed version pairs, keyed by SpiceDB minor version.
+# SpiceDB releases: https://github.com/authzed/spicedb/releases
+# zed releases:     https://github.com/authzed/zed/releases
+# SHA-256s come from each release's `checksums.txt` (zed linux uses
+# the `_gnu` tarball — the musl variant is a separate asset.)
 _SPICEDB_VERSIONS = {
-    "1.30": {
-        "spicedb_version": "1.30.0",
-        "zed_version":     "1.0.0",
+    "1.52": {
+        "spicedb_version": "1.52.0",
+        "zed_version":     "1.1.1",
         "linux_amd64": {
-            "spicedb_url":    "https://github.com/authzed/spicedb/releases/download/v1.30.0/spicedb_1.30.0_linux_amd64.tar.gz",
-            "spicedb_sha256": "",  # placeholder: run tools/update_checksums.sh
-            "zed_url":        "https://github.com/authzed/zed/releases/download/v1.0.0/zed_1.0.0_linux_amd64_gnu.tar.gz",
-            "zed_sha256":     "",  # placeholder
+            "spicedb_url":    "https://github.com/authzed/spicedb/releases/download/v1.52.0/spicedb_1.52.0_linux_amd64.tar.gz",
+            "spicedb_sha256": "7897dc9dc3f5dc2308e7e1d710294afc69fe719e4e92ef51b9d2446ee84fe0dc",
+            "zed_url":        "https://github.com/authzed/zed/releases/download/v1.1.1/zed_1.1.1_linux_amd64_gnu.tar.gz",
+            "zed_sha256":     "2a0901904302a9f59bf35f96dd904897b7664f79a8cc2eede594422468ceb34b",
         },
         "darwin_arm64": {
-            "spicedb_url":    "https://github.com/authzed/spicedb/releases/download/v1.30.0/spicedb_1.30.0_darwin_arm64.tar.gz",
-            "spicedb_sha256": "",  # placeholder
-            "zed_url":        "https://github.com/authzed/zed/releases/download/v1.0.0/zed_1.0.0_darwin_arm64.tar.gz",
-            "zed_sha256":     "",  # placeholder
+            "spicedb_url":    "https://github.com/authzed/spicedb/releases/download/v1.52.0/spicedb_1.52.0_darwin_arm64.tar.gz",
+            "spicedb_sha256": "b6b62ca1b68b9472eef987397a362806a9d25a43b5a23290ba250bb7deb4577c",
+            "zed_url":        "https://github.com/authzed/zed/releases/download/v1.1.1/zed_1.1.1_darwin_arm64.tar.gz",
+            "zed_sha256":     "67247f0054ea07c12dd1853393f4611ca2f1791319a43ad28e303d0e2bedcedf",
         },
         "darwin_amd64": {
-            "spicedb_url":    "https://github.com/authzed/spicedb/releases/download/v1.30.0/spicedb_1.30.0_darwin_amd64.tar.gz",
-            "spicedb_sha256": "",  # placeholder
-            "zed_url":        "https://github.com/authzed/zed/releases/download/v1.0.0/zed_1.0.0_darwin_amd64.tar.gz",
-            "zed_sha256":     "",  # placeholder
+            "spicedb_url":    "https://github.com/authzed/spicedb/releases/download/v1.52.0/spicedb_1.52.0_darwin_amd64.tar.gz",
+            "spicedb_sha256": "24cb41313d65d428e3061e2f0ed0a94d6b8b30643a0c471edb3cadbee9075515",
+            "zed_url":        "https://github.com/authzed/zed/releases/download/v1.1.1/zed_1.1.1_darwin_amd64.tar.gz",
+            "zed_sha256":     "43454c28de34a68018b105076b71f4f43d8142b76c907d7e019594fbecaa129f",
         },
     },
 }
@@ -75,8 +88,8 @@ def _spicedb_binary_repo_impl(rctx):
     for key in ["spicedb_sha256", "zed_sha256"]:
         if not info[key]:
             fail(
-                "SHA-256 for {} SpiceDB {} on {} is a placeholder. " +
-                "Run tools/update_checksums.sh to pin real values.".format(
+                ("rules_spicedb: SHA-256 for {} (SpiceDB {} / {}) is unset. " +
+                 "Run tools/update_checksums.sh to pin real values.").format(
                     key, version, platform),
             )
 

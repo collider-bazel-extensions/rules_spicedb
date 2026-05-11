@@ -81,7 +81,7 @@ Typically consumed indirectly via spicedb_schema and spicedb_test.
             doc = "Platform-specific binary target (set via select() in BUILD.bazel)",
         ),
         "version": attr.string(
-            default = "1.30",
+            default = "1.52",
             doc = "SpiceDB minor version. Must match the binary repo version.",
         ),
     },

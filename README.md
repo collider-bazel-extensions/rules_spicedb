@@ -48,21 +48,25 @@ of primitives:
 
 **MODULE.bazel (Bzlmod)**:
 ```python
-bazel_dep(name = "rules_spicedb", version = "0.2.0")
+bazel_dep(name = "rules_spicedb", version = "0.3.0")
 
 spicedb = use_extension("@rules_spicedb//:extensions.bzl", "spicedb")
-spicedb.system(versions = ["1.30"])
+# v0.3+: spicedb.version() fetches hermetic spicedb + zed binaries
+# from authzed's GitHub releases. No host install required.
+spicedb.version(versions = ["1.52"])
 use_repo(spicedb,
-    "spicedb_1_30_linux_amd64",
-    "spicedb_1_30_darwin_arm64",
-    "spicedb_1_30_darwin_amd64",
+    "spicedb_1_52_linux_amd64",
+    "spicedb_1_52_darwin_arm64",
+    "spicedb_1_52_darwin_amd64",
 )
 ```
+
+Use `spicedb.system(versions = [...])` instead if you want to reuse the host's `spicedb` + `zed` installs (e.g. `brew install authzed/tap/spicedb`). Both modes coexist per-minor-version; see [DESIGN.md](DESIGN.md).
 
 **WORKSPACE (legacy)**:
 ```python
 load("@rules_spicedb//:repositories.bzl", "spicedb_system_dependencies")
-spicedb_system_dependencies(versions = ["1.30"])
+spicedb_system_dependencies(versions = ["1.52"])
 ```
 
 ### 2. Define schema and relationships
@@ -576,20 +580,19 @@ document:public#viewer@user:*
 
 ## Binary acquisition
 
-**System mode** (default, recommended for CI):
+**Hermetic mode (default in v0.3+, recommended for CI):**
 ```python
-spicedb.system(versions = ["1.30"])
+spicedb.version(versions = ["1.52"])
 ```
-Auto-detects `spicedb` and `zed` from `PATH`, then probes `/usr/local/bin`,
-`/usr/bin`, `$HOME/.local/bin`. Fails at `bazel build` time with a clear
-message if either binary is missing.
+Downloads pre-built `spicedb` + `zed` tarballs from authzed's GitHub releases at the pinned sha256s. No host install required. SHA-256s in `extensions.bzl` come from each release's `checksums.txt`. Maintainer flow for bumping pinned versions: edit `_SPICEDB_VERSIONS` then push (or run `tools/update_checksums.sh`).
 
-**Download mode** (hermetic, requires real SHA-256 checksums):
+**System mode** (consumer opt-in):
 ```python
-spicedb.version(versions = ["1.30"])
+spicedb.system(versions = ["1.52"])
 ```
-Downloads tarballs from GitHub. SHA-256 checksums in `extensions.bzl` are
-placeholders — run `tools/update_checksums.sh` before using this mode.
+Reuses the host's `spicedb` + `zed` installs. Auto-detects from `PATH`, then probes `/usr/local/bin`, `/usr/bin`, `$HOME/.local/bin`. Fails at `bazel build` time with a clear message if either binary is missing. Useful when you want to pin to a specific patch version controlled outside rules_spicedb's release cycle.
+
+Both modes coexist per minor-version. rules_spicedb's own `MODULE.bazel` uses `spicedb.version()` so CI runs on a bare `ubuntu-latest` runner with no host install.
 
 ## Installing spicedb and zed
 

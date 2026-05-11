@@ -1,6 +1,6 @@
 module(
     name = "rules_spicedb",
-    version = "0.2.0",
+    version = "0.3.0",
 )
 
 bazel_dep(name = "bazel_skylib", version = "1.5.0")
@@ -22,12 +22,17 @@ git_override(
     commit = "81b60ab80df46b64c612f2576ffef0a7af98ccb6",  # v0.2.0
 )
 
+# v0.3: spicedb.version() now ships real shas — fetches the binary
+# tarballs from authzed's GitHub releases. Hermetic; no host install
+# required. rules_spicedb's own MODULE.bazel uses the hermetic mode
+# so CI runs on bare ubuntu-latest. Consumers can still opt into
+# spicedb.system() if they want a specific host build.
 spicedb = use_extension("//:extensions.bzl", "spicedb")
-spicedb.system(versions = ["1.30"])
+spicedb.version(versions = ["1.52"])
 use_repo(spicedb,
-    "spicedb_1_30_linux_amd64",
-    "spicedb_1_30_darwin_arm64",
-    "spicedb_1_30_darwin_amd64",
+    "spicedb_1_52_linux_amd64",
+    "spicedb_1_52_darwin_arm64",
+    "spicedb_1_52_darwin_amd64",
 )
 
 # ---- dev-only: smoke composition for the install path ----------------------

@@ -8,8 +8,13 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Hermetic mode (spicedb.version) — runner has NO host spicedb or
+  # zed installed. Proves the v0.3+ hermetic toolchain materializes
+  # both binaries from authzed's GitHub releases via the pinned
+  # sha256s in extensions.bzl. rules_spicedb's own MODULE.bazel uses
+  # spicedb.version() so the full test matrix runs hermetically.
   analysis:
-    name: bazel test (ubuntu-latest, analysis)
+    name: bazel test (ubuntu-latest, hermetic spicedb.version)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,38 +24,35 @@ jobs:
           disk-cache: ${{ github.workflow }}-analysis
           repository-cache: true
 
-      # The system-mode `spicedb` toolchain looks for spicedb + zed
-      # on $PATH. Install both so analysis of the pre-existing
-      # test-time targets passes. Versions match `spicedb.system(versions
-      # = ["1.30"])` in MODULE.bazel — bump in lockstep.
-      - name: Install spicedb + zed binaries
+      # Belt-and-suspenders: verify no host spicedb/zed are on PATH
+      # at job start. If any are present, the hermetic test would
+      # silently fall back to them and we'd lose the proof. (Mirror
+      # of rules_pg v0.4's hermetic verification step.)
+      - name: Verify NO host spicedb/zed on PATH
         run: |
           set -euo pipefail
-          curl -sSfL "https://github.com/authzed/spicedb/releases/download/v1.30.1/spicedb_1.30.1_linux_amd64.tar.gz" \
-            | sudo tar -xz -C /usr/local/bin spicedb
-          curl -sSfL "https://github.com/authzed/zed/releases/download/v0.36.1/zed_0.36.1_linux_amd64_gnu.tar.gz" \
-            | sudo tar -xz -C /usr/local/bin zed
-          sudo chmod +x /usr/local/bin/spicedb /usr/local/bin/zed
-          spicedb version
-          zed version
+          for bin in spicedb zed; do
+            if command -v "$bin" >/dev/null 2>&1; then
+              echo "FAIL: $bin found at $(command -v "$bin"); hermetic test would be meaningless" >&2
+              exit 1
+            fi
+          done
+          echo "OK — no host spicedb/zed; hermetic mode test is meaningful"
 
-      # `bazel build //...` analyzes ALL platforms' spicedb_binary_files
-      # targets, including darwin_arm64 / darwin_amd64 which can't be
-      # populated on a linux runner (the system extension symlinks the
-      # host's spicedb, so cross-platform repos stay empty and
-      # `_require("spicedb")` fails). Build targeted paths instead.
+      # Cross-platform binary repos can't materialize on a linux
+      # runner (the wrong-arch spicedb tarballs fail sha-check at
+      # download time, even though they're never executed). Target
+      # specific paths to avoid analyzing them. Same lesson rules_pg
+      # / rules_temporal learned.
       - name: bazel build (linux targets only)
         run: |
           bazel build \
-            //:spicedb_1_30 \
+            //:spicedb_1_52 \
             //tests:test_server \
             //tests:test_server_health \
             //tests/install_smoke:smoke_test
 
-      # Same constraint as the build step — `bazel test //...`
-      # analyzes the wrong-platform binary repos and fails. Target the
-      # tests packages only.
-      - name: bazel test (analysis only, linux targets)
+      - name: bazel test (hermetic CLI primitives)
         run: |
           bazel test //tests/... \
               --test_tag_filters=-manual \
@@ -78,16 +80,16 @@ jobs:
           disk-cache: ${{ github.workflow }}-install-smoke
           repository-cache: true
 
-      # The smoke needs zed on the runner: it port-forwards the
-      # in-cluster SpiceDB Service to localhost and drives schema
-      # writes + permission checks via zed CLI. (kubectl-exec'ing
-      # a zed pod fails because authzed/zed:latest is a from-scratch
-      # image without /bin/sh — kubectl run --command -- sleep 600
-      # has nothing to run.)
+      # The smoke port-forwards the in-cluster SpiceDB Service to
+      # localhost and drives schema writes + permission checks via
+      # the host zed CLI. (kubectl-exec'ing a zed pod fails because
+      # authzed/zed:latest is from-scratch and lacks /bin/sh —
+      # kubectl run --command -- sleep 600 has nothing to run.)
+      # Version matches the v0.3 pin so behavior stays consistent.
       - name: Install zed CLI
         run: |
           set -euo pipefail
-          curl -sSfL "https://github.com/authzed/zed/releases/download/v0.36.1/zed_0.36.1_linux_amd64_gnu.tar.gz" \
+          curl -sSfL "https://github.com/authzed/zed/releases/download/v1.1.1/zed_1.1.1_linux_amd64_gnu.tar.gz" \
             | sudo tar -xz -C /usr/local/bin zed
           sudo chmod +x /usr/local/bin/zed
           zed version
@@ -96,9 +98,6 @@ jobs:
         run: docker version
 
       - name: bazel test //tests/install_smoke:smoke_test
-        # kind boot (~30s) + operator image pull (~50 MB) +
-        # SpiceDBCluster reconciliation + memory-backed pod startup +
-        # zed pod (~50 MB) + schema write + permission checks.
         run: bazel test //tests/install_smoke:smoke_test --test_output=streamed --test_timeout=900
 
       - name: Upload test logs on failure
