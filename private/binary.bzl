@@ -9,7 +9,7 @@ SpiceDBBinaryInfo = provider(
     fields = {
         "spicedb":   "File: spicedb server binary",
         "zed":       "File: zed CLI binary",
-        "version":   "string: SpiceDB minor version, e.g. '1.30'",
+        "version":   "string: SpiceDB minor version, e.g. '1.52'",
         "all_files": "depset: all binary files required at runtime",
     },
 )

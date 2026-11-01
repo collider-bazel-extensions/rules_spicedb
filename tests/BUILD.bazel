@@ -61,6 +61,19 @@ spicedb_test(
     # Multi-type schema: org/team/repo with hierarchical permission inheritance.
 )
 
+spicedb_test(
+    name   = "args_env_test",
+    schema = ":example_schema",
+    srcs   = ["args_env_test.sh"],
+    data   = ["schema/example.zed"],
+    # #7: args and env reach the test binary ($(rootpath) expands against data).
+    args   = ["--flag", "'two words'", "$(rootpath schema/example.zed)"],
+    env    = {
+        "RULES_SPICEDB_TEST_PLAIN":  "plain value",
+        "RULES_SPICEDB_TEST_SCHEMA": "$(rootpath schema/example.zed)",
+    },
+)
+
 # ---------------------------------------------------------------------------
 # spicedb_server + health check (for server_test and health_check_test)
 # ---------------------------------------------------------------------------
