@@ -224,7 +224,7 @@ _version_tag = tag_class(
     doc = "Download pre-built spicedb + zed binaries from GitHub.",
     attrs = {
         "versions": attr.string_list(
-            doc       = "SpiceDB minor versions (e.g. ['1.30']).",
+            doc       = "SpiceDB minor versions (e.g. ['1.52']).",
             mandatory = True,
         ),
     },
@@ -234,7 +234,7 @@ _system_tag = tag_class(
     doc = "Use host-installed spicedb + zed binaries.",
     attrs = {
         "versions": attr.string_list(
-            doc       = "SpiceDB minor versions to register (e.g. ['1.30']).",
+            doc       = "SpiceDB minor versions to register (e.g. ['1.52']).",
             mandatory = True,
         ),
         "bin_dir": attr.string(

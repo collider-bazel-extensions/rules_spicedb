@@ -48,7 +48,7 @@ of primitives:
 
 **MODULE.bazel (Bzlmod)**:
 ```python
-bazel_dep(name = "rules_spicedb", version = "0.3.0")
+bazel_dep(name = "rules_spicedb", version = "0.3.1")
 
 spicedb = use_extension("@rules_spicedb//:extensions.bzl", "spicedb")
 # v0.3+: spicedb.version() fetches hermetic spicedb + zed binaries
@@ -442,9 +442,18 @@ spicedb_test(
     preshared_key = "testkey",         # optional, default "rules_spicedb_test_key"
     test_rule     = sh_test,           # optional; default sh_test
     size          = "medium",          # optional
+    data          = ["//tools:migrate"],  # optional runtime data
+    args          = ["$(rootpath //tools:migrate)", "--strict"],  # optional
+    env           = {"MIGRATE_BIN": "$(rootpath //tools:migrate)"},  # optional
+    env_inherit   = ["HOME"],          # optional
     # ... other test_rule kwargs
 )
 ```
+
+`args`, `env` and `env_inherit` reach the test binary, as do `--test_env`
+and `--test_arg`. `$(rootpath)` / `$(location)` in `args` expand against
+`srcs` and `data`, in `env` against `data`. The SpiceDB variables below are
+set last, so an `env` entry of the same name is overridden.
 
 ### `spicedb_server` + `spicedb_health_check`
 
@@ -584,13 +593,20 @@ document:public#viewer@user:*
 ```python
 spicedb.version(versions = ["1.52"])
 ```
-Downloads pre-built `spicedb` + `zed` tarballs from authzed's GitHub releases at the pinned sha256s. No host install required. SHA-256s in `extensions.bzl` come from each release's `checksums.txt`. Maintainer flow for bumping pinned versions: edit `_SPICEDB_VERSIONS` then push (or run `tools/update_checksums.sh`).
+Each key is a SpiceDB minor version and resolves to one pinned pair:
+
+| Key      | spicedb  | zed     |
+|----------|----------|---------|
+| `"1.52"` | `1.52.0` | `1.1.1` |
+
+Any other key fails with `Unsupported SpiceDB version`. Repositories are named
+after the key (`spicedb_1_52_<platform>`). Downloads pre-built `spicedb` + `zed` tarballs from authzed's GitHub releases at the pinned sha256s. No host install required. SHA-256s in `extensions.bzl` come from each release's `checksums.txt`. Maintainer flow for bumping pinned versions: edit `_SPICEDB_VERSIONS` then push (or run `tools/update_checksums.sh`).
 
 **System mode** (consumer opt-in):
 ```python
 spicedb.system(versions = ["1.52"])
 ```
-Reuses the host's `spicedb` + `zed` installs. Auto-detects from `PATH`, then probes `/usr/local/bin`, `/usr/bin`, `$HOME/.local/bin`. Fails at `bazel build` time with a clear message if either binary is missing. Useful when you want to pin to a specific patch version controlled outside rules_spicedb's release cycle.
+Reuses the host's `spicedb` + `zed` installs; the key only names the repositories (`spicedb_<key>_<platform>`), whatever version the host has. Auto-detects from `PATH`, then probes `/usr/local/bin`, `/usr/bin`, `$HOME/.local/bin`. Fails at `bazel build` time with a clear message if either binary is missing. Useful when you want to pin to a specific patch version controlled outside rules_spicedb's release cycle.
 
 Both modes coexist per minor-version. rules_spicedb's own `MODULE.bazel` uses `spicedb.version()` so CI runs on a bare `ubuntu-latest` runner with no host install.
 

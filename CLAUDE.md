@@ -33,6 +33,7 @@ rules_spicedb/
 │   └── toolchain.bzl         # Toolchain type declaration
 └── tests/
     ├── BUILD.bazel
+    ├── args_env_test.sh      # #7: args, env, --test_env (.bazelrc) reach the test binary
     ├── schema/               # Example .zed schema files
     │   ├── example.zed       # Simple document/user schema
     │   └── platform.zed      # Complex org/team/repo schema
@@ -169,7 +170,14 @@ spicedb_test(
     relationships = ":my_seed",      # optional
     preshared_key = "testkey",       # optional, default "rules_spicedb_test_key"
     test_rule     = sh_test,         # optional; default sh_test
+    args          = [...],           # optional: test argv ($(rootpath) over srcs/data)
+    env           = {...},           # optional: test env ($(rootpath) over data)
+    env_inherit   = [...],           # optional
+    data          = [...],           # optional
 )
+# args/env/env_inherit go on the outer launcher test (never the manual
+# <name>_inner target, #7); the launcher execs the binary with sys.argv[1:],
+# and the SpiceDB variables override same-named env entries.
 
 # Long-running service for rules_itest:
 spicedb_server(
@@ -199,14 +207,14 @@ spicedb_health_check(
 ### MODULE.bazel (Bzlmod)
 
 ```python
-bazel_dep(name = "rules_spicedb", version = "0.1.0")
+bazel_dep(name = "rules_spicedb", version = "0.3.1")
 
 spicedb = use_extension("@rules_spicedb//:extensions.bzl", "spicedb")
-spicedb.system(versions = ["1.30"])
+spicedb.version(versions = ["1.52"])   # 1.52 → spicedb 1.52.0 + zed 1.1.1
 use_repo(spicedb,
-    "spicedb_1_30_linux_amd64",
-    "spicedb_1_30_darwin_arm64",
-    "spicedb_1_30_darwin_amd64",
+    "spicedb_1_52_linux_amd64",
+    "spicedb_1_52_darwin_arm64",
+    "spicedb_1_52_darwin_amd64",
 )
 ```
 
@@ -214,7 +222,7 @@ use_repo(spicedb,
 
 ```python
 load("@rules_spicedb//:repositories.bzl", "spicedb_system_dependencies")
-spicedb_system_dependencies(versions = ["1.30"])
+spicedb_system_dependencies(versions = ["1.52"])
 ```
 
 ## Development
@@ -242,13 +250,15 @@ sudo dnf install spicedb zed
 
 All tests must pass before any commit with code changes.
 
-### Test results (last full run: 2026-04-19)
+### Test results (last full run: 2026-11-01)
 
-All 5 tests pass on Linux x86_64 with SpiceDB v1.51.1 and zed v0.22.0.
+All 6 tests pass on Linux x86_64 with SpiceDB v1.52.0 and zed v1.1.1 (hermetic
+`spicedb.version`). `.bazelrc` sets the `--test_env` that `args_env_test` checks.
 
 | Test target                         | What it verifies                                                       | Result |
 |-------------------------------------|------------------------------------------------------------------------|--------|
 | `//tests:schema_smoke_test`         | Schema written; `zed schema read` returns expected definitions         | PASSED |
+| `//tests:args_env_test`             | `args` (incl. `$(rootpath)`), `env`, `--test_env` and SpiceDB vars reach the test binary (#7) | PASSED |
 | `//tests:seed_smoke_test`           | Relationships loaded; `zed permission check` resolves correctly        | PASSED |
 | `//tests:platform_access_test`      | Org/team/repo hierarchy: 22 permission assertions across 5 users       | PASSED |
 | `//tests:spicedb_health_check_test` | Health check exits non-zero without env file, 0 when present          | PASSED |
@@ -261,7 +271,7 @@ The mode is selected by `RULES_SPICEDB_MODE` (set by the generated wrapper):
 
 | Mode     | Behaviour                                                        |
 |----------|------------------------------------------------------------------|
-| `test`   | `_spicedb_setup()` → `os.execve(test_binary)`                    |
+| `test`   | `_spicedb_setup()` → `os.execve(test_binary, argv[1:])`          |
 | `server` | `_spicedb_setup()` → write env file → `signal.pause()`           |
 
 Both modes share `_spicedb_setup`, which:

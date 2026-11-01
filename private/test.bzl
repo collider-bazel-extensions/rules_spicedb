@@ -66,8 +66,22 @@ exec "$RUNFILES_ROOT/{workspace}/{launcher}" "$@"
             transitive = [binary_info.all_files, schema_files, rel_files],
         ),
     ).merge(ctx.attr.test_binary.default_runfiles)
+    for d in ctx.attr.data:
+        runfiles = runfiles.merge(d.default_runfiles)
 
-    return [DefaultInfo(executable = wrapper, runfiles = runfiles)]
+    # Bazel applies the rule's `args` itself (the wrapper and launcher pass
+    # them on); `env` and `env_inherit` only reach the test via this provider.
+    env = {
+        k: ctx.expand_location(v, ctx.attr.data)
+        for k, v in ctx.attr.env.items()
+    }
+    return [
+        DefaultInfo(executable = wrapper, runfiles = runfiles),
+        RunEnvironmentInfo(
+            environment           = env,
+            inherited_environment = ctx.attr.env_inherit,
+        ),
+    ]
 
 _spicedb_launcher_test = rule(
     implementation = _spicedb_launcher_test_impl,
@@ -93,8 +107,19 @@ _spicedb_launcher_test = rule(
             executable        = False,
         ),
         "preshared_key": attr.string(default = "rules_spicedb_test_key"),
+        # Forwarded from the macro so $(rootpath) in args/env can name them.
+        "data": attr.label_list(allow_files = True),
+        "env": attr.string_dict(),
+        "env_inherit": attr.string_list(),
     },
 )
+
+def _dedupe(labels):
+    out = []
+    for l in labels:
+        if l not in out:
+            out.append(l)
+    return out
 
 # ---------------------------------------------------------------------------
 # spicedb_test macro
@@ -111,6 +136,10 @@ def spicedb_test(
         timeout = None,
         tags = None,
         test_rule = None,
+        args = None,
+        env = None,
+        env_inherit = None,
+        data = None,
         **kwargs):
     """Macro: runs a test with an ephemeral SpiceDB instance.
 
@@ -121,7 +150,9 @@ def spicedb_test(
       3. Optionally loads relationships (from spicedb_relationships.srcs).
       4. Exports SPICEDB_GRPC_ADDR, SPICEDB_PRESHARED_KEY, ZED_BIN,
          ZED_ENDPOINT, ZED_TOKEN, ZED_INSECURE to the test binary.
-      5. exec's the wrapped test binary.
+      5. exec's the wrapped test binary with the target's `args`, its
+         `env` / `env_inherit` / `--test_env` variables, and the SpiceDB
+         variables above (which win on a clash).
       6. SpiceDB is terminated when the test process group exits.
 
     Args:
@@ -136,6 +167,12 @@ def spicedb_test(
         timeout:       Bazel test timeout override.
         tags:          Extra tags.
         test_rule:     The *_test rule for the inner binary. Default: sh_test.
+        args:          Arguments for the test binary ($(rootpath) etc. expand
+                       against srcs/data).
+        env:           Environment for the test binary ($(rootpath) etc.
+                       expand against data).
+        env_inherit:   Variables passed through from the client environment.
+        data:          Runtime data, available to the test binary.
         **kwargs:      Remaining kwargs forwarded to test_rule.
     """
     srcs  = srcs  or []
@@ -148,10 +185,14 @@ def spicedb_test(
     _test_rule = test_rule or sh_test
 
     inner_name = name + "_inner"
+    data  = data  or []
+    # args/env/env_inherit belong on the outer test: Bazel never runs the
+    # inner target itself, so on it they would be dropped (#7).
     _test_rule(
         name = inner_name,
         srcs = srcs,
         deps = deps,
+        data = data,
         tags = tags + ["manual"],
         **kwargs
     )
@@ -162,6 +203,10 @@ def spicedb_test(
         relationships = relationships,
         test_binary   = ":" + inner_name,
         preshared_key = preshared_key,
+        args          = args or [],
+        env           = env or {},
+        env_inherit   = env_inherit or [],
+        data          = _dedupe(srcs + data),
         size          = size,
         timeout       = timeout,
         tags          = tags,

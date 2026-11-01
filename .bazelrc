@@ -1,0 +1,1 @@
+test --test_env=RULES_SPICEDB_TEST_ENV=from_test_env  # read by //tests:args_env_test

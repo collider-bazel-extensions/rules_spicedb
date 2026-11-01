@@ -15,7 +15,7 @@ def spicedb_system_dependencies(versions, bin_dir = ""):
     Equivalent to spicedb.system() in MODULE.bazel.
 
     Args:
-        versions: list of SpiceDB minor version strings (e.g. ["1.30"]).
+        versions: list of SpiceDB minor version strings (e.g. ["1.52"]).
         bin_dir:  directory containing spicedb and zed binaries.
                   Omit to auto-detect from PATH and common locations.
     """
@@ -35,7 +35,7 @@ def spicedb_dependencies(versions):
     Equivalent to spicedb.version() in MODULE.bazel.
 
     Args:
-        versions: list of SpiceDB minor version strings (e.g. ["1.30"]).
+        versions: list of SpiceDB minor version strings (e.g. ["1.52"]).
     """
     for version in versions:
         for platform in PLATFORMS:

@@ -9,7 +9,7 @@ Reads RULES_SPICEDB_MANIFEST (JSON) and performs the full SpiceDB lifecycle:
   → SIGTERM → exit 0
 
 Modes (set via RULES_SPICEDB_MODE):
-  test   (default): _spicedb_setup() → os.execve(test_binary)
+  test   (default): _spicedb_setup() → os.execve(test_binary, argv[1:])
   server:           _spicedb_setup() → write $TEST_TMPDIR/<name>.env → signal.pause()
 
 Environment exported to test binaries and the env file:
@@ -320,7 +320,9 @@ def main():
         # SpiceDB is a child process; it will be killed when the test process
         # group exits (Bazel handles this via cgroups / process groups).
         _log(f"starting test binary: {os.path.basename(test_bin)}")
-        os.execve(test_bin, [test_bin], env)
+        # Pass on the target's args (Bazel hands them to the wrapper, which
+        # hands them to us).
+        os.execve(test_bin, [test_bin] + sys.argv[1:], env)
 
     else:  # server mode
         output_env = os.path.join(test_tmpdir, f"{server_name}.env")

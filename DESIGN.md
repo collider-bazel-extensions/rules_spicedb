@@ -119,10 +119,18 @@ more reliable than calling `zed schema read`:
 ```
 wrapper.sh → launcher.py → spicedb serve-testing
                          → zed import
-                         → os.execve(test_binary)   ← launcher becomes test binary
+                         → os.execve(test_binary, args)  ← launcher becomes test binary
                                                        SpiceDB is an orphan child;
                                                        killed by Bazel's process group
 ```
+
+The target's `args`, `env` and `env_inherit` live on the outer launcher test,
+not on the `<name>_inner` target (which Bazel never runs, so they were
+dropped there, #7). Bazel passes `args` (plus `--test_arg`) to the wrapper,
+which passes them to the launcher, which passes `sys.argv[1:]` on to the test
+binary; `env` / `env_inherit` come from the outer rule's `RunEnvironmentInfo`
+and `--test_env` from Bazel, all in the launcher's environment, which the test
+binary inherits with the SpiceDB variables layered on top.
 
 `os.execve` replaces the launcher process with the test binary. SpiceDB
 continues running as a child process until Bazel's test harness kills the
