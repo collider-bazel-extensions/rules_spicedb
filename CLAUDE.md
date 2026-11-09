@@ -315,3 +315,7 @@ All test shell scripts must:
 - **No caveated relationships in seed files.** The relationship tuple format
   `object:id#relation@subject:id` does not support caveats. Caveated
   relationships must be created programmatically in the test binary.
+
+## Release archive
+
+`.gitattributes` export-ignores `tests/`, so they may load dev-only modules; nothing else may. CI's `consumer` job checks that `@rules_spicedb//...` loads from the commit's `git archive` (`.github/consumer/check.sh`).

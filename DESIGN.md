@@ -212,3 +212,7 @@ rules_spicedb's own `MODULE.bazel` uses `spicedb.version()` so CI runs on a bare
   advanced scenarios, wrap `spicedb serve` with a real datastore in a custom
   `spicedb_server`-equivalent rule.
 - **Windows** — no pre-built binary source for Windows; PRs welcome.
+
+## Release archive contents (v0.3.2)
+
+`tests/` is `export-ignore` (`.gitattributes`): its packages load dev-only modules, which made `@rules_spicedb//...` unloadable for consumers. GitHub's tag tarballs honour it; a `git_override` clone still contains it. `REPO.bazel` `ignore_directories` isn't used because it would also hide it from this repo's own `bazel test`. CI's `consumer` job (`.github/consumer/check.sh`) queries `//...` from the commit's `git archive`. Same fix as rules_kubectl#5 / rules_atlas#12.

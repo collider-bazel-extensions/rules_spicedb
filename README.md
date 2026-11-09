@@ -48,7 +48,7 @@ of primitives:
 
 **MODULE.bazel (Bzlmod)**:
 ```python
-bazel_dep(name = "rules_spicedb", version = "0.3.1")
+bazel_dep(name = "rules_spicedb", version = "0.3.2")
 
 spicedb = use_extension("@rules_spicedb//:extensions.bzl", "spicedb")
 # v0.3+: spicedb.version() fetches hermetic spicedb + zed binaries
@@ -60,6 +60,8 @@ use_repo(spicedb,
     "spicedb_1_52_darwin_amd64",
 )
 ```
+
+The release archive (the tag tarball) leaves out `tests/`, whose packages load dev-only modules, so `bazel query @rules_spicedb//...` works for consumers (since v0.3.2). A `git_override` clone still contains them; name packages instead (for example `@rules_spicedb//:all`).
 
 Use `spicedb.system(versions = [...])` instead if you want to reuse the host's `spicedb` + `zed` installs (e.g. `brew install authzed/tap/spicedb`). Both modes coexist per-minor-version; see [DESIGN.md](DESIGN.md).
 
