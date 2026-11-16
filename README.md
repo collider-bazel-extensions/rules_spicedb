@@ -637,3 +637,11 @@ curl -L https://github.com/authzed/zed/releases/latest/download/zed_linux_amd64_
 - **No caveated relationships in seed files** — use the SpiceDB gRPC API directly.
 - **Windows not supported.**
 - **Port allocation is TOCTOU** — retried up to 5 times on conflict.
+
+---
+
+## Requesting a new rules package
+
+Want Bazel rules for another tool or service?
+[Request a rules package](https://github.com/collider-bazel-extensions/.github/issues/new?template=request-a-rules-package.yml).
+The [organization page](https://github.com/collider-bazel-extensions) lists every package.
