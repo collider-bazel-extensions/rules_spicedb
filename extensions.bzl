@@ -245,30 +245,62 @@ _system_tag = tag_class(
     },
 )
 
-def _spicedb_extension(module_ctx):
-    for mod in module_ctx.modules:
-        for tag in mod.tags.version:
-            for version in tag.versions:
-                for platform in PLATFORMS:
-                    repo_name = "spicedb_{}_{}".format(
-                        version.replace(".", "_"), platform)
-                    spicedb_binary_repo(
-                        name     = repo_name,
-                        version  = version,
-                        platform = platform,
-                    )
+def _module_requests(mod):
+    """{version: (mode, bin_dir)} for one module's tags; fails on a conflict."""
+    requests = {}
+    tags = [("version", tag, "") for tag in mod.tags.version] + \
+           [("system", tag, tag.bin_dir) for tag in mod.tags.system]
+    for mode, tag, bin_dir in tags:
+        for version in tag.versions:
+            prev = requests.get(version)
+            if prev != None and prev != (mode, bin_dir):
+                fail(("rules_spicedb: {} declares SpiceDB {} twice, differently " +
+                      "(spicedb.{} and spicedb.{}); declare it once.").format(
+                    "the root module" if mod.is_root else mod.name,
+                    version,
+                    prev[0],
+                    mode,
+                ))
+            requests[version] = (mode, bin_dir)
+    return requests
 
-        for tag in mod.tags.system:
-            for version in tag.versions:
-                for platform in PLATFORMS:
-                    repo_name = "spicedb_{}_{}".format(
-                        version.replace(".", "_"), platform)
-                    spicedb_system_binary_repo(
-                        name     = repo_name,
-                        version  = version,
-                        bin_dir  = tag.bin_dir,
-                        platform = platform,
-                    )
+def _spicedb_extension(module_ctx):
+    # The extension sees every module's tags, and each spicedb_<v>_<platform>
+    # repo can be created only once (#9). Per version, the root module's tag
+    # wins, then other modules' (in dependency order), then rules_spicedb's
+    # own, which declares the version its CI uses so that a root with no tag
+    # resolves. So a root may repeat rules_spicedb's version, or switch it to
+    # spicedb.system().
+    own = {}
+    chosen = {}
+    for mod in module_ctx.modules:
+        requests = _module_requests(mod)
+        if mod.name == "rules_spicedb" and not mod.is_root:
+            own = requests
+            continue
+        for version, request in requests.items():
+            if version not in chosen:
+                chosen[version] = request
+    for version, request in own.items():
+        if version not in chosen:
+            chosen[version] = request
+
+    for version, (mode, bin_dir) in chosen.items():
+        for platform in PLATFORMS:
+            repo_name = "spicedb_{}_{}".format(version.replace(".", "_"), platform)
+            if mode == "version":
+                spicedb_binary_repo(
+                    name     = repo_name,
+                    version  = version,
+                    platform = platform,
+                )
+            else:
+                spicedb_system_binary_repo(
+                    name     = repo_name,
+                    version  = version,
+                    bin_dir  = bin_dir,
+                    platform = platform,
+                )
 
 spicedb = module_extension(
     implementation = _spicedb_extension,
