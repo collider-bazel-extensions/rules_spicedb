@@ -201,6 +201,10 @@ Pre-v0.3 the `_SPICEDB_VERSIONS` table had placeholder sha256s — `version()` m
 
 rules_spicedb's own `MODULE.bazel` uses `spicedb.version()` so CI runs on a bare `ubuntu-latest` with NO host spicedb/zed. The workflow verifies neither binary is on PATH before `bazel test` to make the hermeticity proof unambiguous (mirror of rules_pg v0.4's hermetic-verification step).
 
+### v0.3.3: one repo per version across modules (#9)
+
+The extension sees every module's tags, and through v0.3.2 it created `spicedb_<v>_<platform>` once per tag. rules_spicedb's own `MODULE.bazel` declares `spicedb.version(["1.52"])` (so CI and a tagless root work), so a root declaring the same version, as the README shows, failed with "repo already generated". Now each version is created once, from the first of: the root module's tag, other modules' tags (dependency order), rules_spicedb's own. That keeps other modules' versions working (unlike rules_kind/rules_argocd, which ignore them: here a module's `use_repo` of its own version would otherwise break) and lets the root switch rules_spicedb's version to `spicedb.system()`. Within one module, a version declared both ways fails. `.github/consumer/check.sh` covers the repro and the conflict.
+
 ## What was NOT implemented
 
 - **Caveated relationships in seed files** — the tuple format
